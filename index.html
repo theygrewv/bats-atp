@@ -29,7 +29,32 @@
         }
         @keyframes stars-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
 
+        /* AUTH OVERLAY (OAuth Optimized) */
+        #auth-overlay {
+            position: fixed; inset: 0; z-index: 10000;
+            background: rgba(5, 5, 5, 0.9); backdrop-filter: blur(10px);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            padding: 20px; text-align: center;
+        }
+        .auth-card {
+            background: #111; border: 1px solid #1a237e; padding: 30px; border-radius: 20px;
+            width: 100%; max-width: 320px; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .auth-input {
+            width: 100%; background: #000; border: 1px solid #333; color: #fff;
+            padding: 12px; margin: 10px 0; border-radius: 8px; font-size: 16px; text-align: center;
+        }
+        #btn-login {
+            background: #00ff88; color: #000; border: none; width: 100%;
+            padding: 15px; border-radius: 40px; font-weight: 900; margin-top: 10px; cursor: pointer;
+        }
+
         #table { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 20px; z-index: 10; position: relative; }
+
+        .black-card, .white-card, .ghost-card {
+            -webkit-touch-callout: none !important;
+            user-select: none !important;
+        }
 
         .black-card {
             background-color: #111 !important; color: #fff !important;
@@ -47,7 +72,6 @@
             touch-action: pan-x;
         }
 
-        /* FIXED GEOMETRY RESPONSE CARDS */
         .white-card {
             width: 140px !important; min-width: 140px !important;
             height: 190px !important; min-height: 190px !important;
@@ -56,9 +80,7 @@
             display: flex; flex-direction: column; justify-content: flex-start;
             box-shadow: 0 8px 20px rgba(0,0,0,0.4); flex-shrink: 0;
         }
-        .white-card .card-text { margin-bottom: auto; }
 
-        /* CLEAN CONFIRMATION HUD */
         #confirmation-hud {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%); text-align: center;
@@ -66,11 +88,8 @@
         }
 
         .hud-title { font-size: 26px; font-weight: 900; letter-spacing: 2px; color: #00ff88; margin-bottom: 10px; text-shadow: 0 0 15px rgba(0,255,136,0.3); }
-        .hud-sub { font-size: 15px; opacity: 0.8; line-height: 1.6; margin-bottom: 35px; max-width: 300px; margin-left: auto; margin-right: auto; }
-        
         #btn-next { background: #00ff88; color: #000; border: none; padding: 14px 35px; border-radius: 40px; font-weight: 900; cursor: pointer; letter-spacing: 1px; }
 
-        /* GHOSTS & ANIMATIONS */
         .ghost-card { position: fixed; pointer-events: auto; z-index: 9999; background-color: #ffffff !important; color: #000000 !important; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; justify-content: flex-start; box-shadow: 0 30px 80px rgba(0,0,0,1); width: 140px; height: 190px; transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1); }
         .ghost-played { left: calc(50% - 90px) !important; top: 30% !important; width: 180px !important; height: 250px !important; transform: rotate(-3deg); }
         .ghost-submitted { border: 5px solid #00ff88 !important; animation: pulse 1s infinite alternate; }
@@ -86,6 +105,15 @@
     </style>
 </head>
 <body>
+
+    <div id="auth-overlay">
+        <div class="auth-card">
+            <h2 style="color:#00ff88; margin-top:0; letter-spacing: 4px;">B.A.T.S.</h2>
+            <p style="font-size:12px; opacity:0.7; margin-bottom: 20px;">Authorize with Bluesky to Play</p>
+            <input type="text" id="auth-handle" class="auth-input" placeholder="yourname.bsky.social">
+            <button id="btn-login" onclick="login()">Connect via OAuth</button>
+        </div>
+    </div>
 
     <div id="table">
         <div id="confirmation-hud">
@@ -104,11 +132,54 @@
     <button id="btn-capture" onclick="takeScreenshot()">Capture Combination</button>
     <div id="hand-area"></div>
 
-    <script>
+    <script type="module">
+        import { BrowserOAuthClient } from 'https://esm.sh/@atproto/oauth-client-browser';
+        import { BskyAgent } from 'https://esm.sh/@atproto/api';
+        
         const BASE_URL = `https://raw.githubusercontent.com/theygrewv/bats-engine/main/data`;
+        
+        // --- OAUTH CONFIG ---
+        const oauthClient = new BrowserOAuthClient({
+            handleResolver: 'https://bsky.social',
+            clientMetadata: 'https://bats.skydrops.app/client-metadata.json',
+        });
+
+        let agent = null;
         let activeGhost = null, originalCardSource = null, pressTimer, lastTap = 0, startX = 0, startY = 0;
 
-        async function initGame() {
+        // --- AUTH FLOW ---
+        async function initAuth() {
+            try {
+                const result = await oauthClient.init();
+                if (result) {
+                    agent = new BskyAgent(result.session);
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    window.initGame();
+                } else {
+                    document.getElementById('auth-overlay').style.display = 'flex';
+                }
+            } catch (err) {
+                console.error("Auth failed:", err);
+                document.getElementById('auth-overlay').style.display = 'flex';
+            }
+        }
+
+        window.login = async () => {
+            const handle = document.getElementById('auth-handle').value;
+            const btn = document.getElementById('btn-login');
+            if (!handle) return alert("Enter your handle first!");
+            
+            try {
+                btn.innerText = "Redirecting...";
+                await oauthClient.signIn(handle);
+            } catch (e) {
+                btn.innerText = "Error Redirecting";
+                console.error(e);
+            }
+        };
+
+        // --- GAME LOGIC ---
+        window.initGame = async () => {
             document.getElementById('confirmation-hud').style.display = 'none';
             const blackCard = document.getElementById('main-black-card');
             blackCard.style.opacity = '1'; blackCard.style.transform = 'scale(1)';
@@ -118,6 +189,7 @@
                 const bId = String(Math.floor(Math.random() * manifest.stats.blackCardsCount) + 1).padStart(3, '0');
                 const bCard = await (await fetch(`${BASE_URL}/cards/black/prompt-${bId}.json`)).json();
                 document.getElementById('prompt-text').innerText = bCard.text;
+                
                 const handArea = document.getElementById('hand-area');
                 handArea.innerHTML = '';
                 let usedIds = new Set();
@@ -134,7 +206,7 @@
                     }
                 }
             } catch (e) { console.error(e); }
-        }
+        };
 
         function clearBoardState() {
             if (activeGhost) { activeGhost.remove(); activeGhost = null; }
@@ -143,20 +215,41 @@
             document.getElementById('hand-area').style.transform = 'translateY(0)';
         }
 
-        function sendToCzar() {
+        window.sendToCzar = async () => {
+            if (!agent) return alert("Not logged in!");
             if (!activeGhost || !activeGhost.classList.contains('ghost-submitted')) return;
-            activeGhost.classList.add('ghost-sent');
-            document.getElementById('btn-capture').style.display = 'none';
-            document.getElementById('main-black-card').style.opacity = '0';
-            document.getElementById('main-black-card').style.transform = 'scale(0.8)';
-            if (window.navigator.vibrate) window.navigator.vibrate(60);
-            setTimeout(() => {
-                if(activeGhost) {
-                    activeGhost.remove(); activeGhost = null;
-                    document.getElementById('confirmation-hud').style.display = 'block';
-                }
-            }, 600);
-        }
+            
+            try {
+                const blobText = activeGhost.querySelector('.card-text').innerText;
+                
+                // PUBLISH TO ATPROTO VIA CUSTOM LEXICON
+                await agent.api.com.atproto.repo.createRecord({
+                    repo: agent.session.did,
+                    collection: 'app.skydrops.bats.card',
+                    record: {
+                        $type: 'app.skydrops.bats.card',
+                        text: blobText,
+                        createdAt: new Date().toISOString()
+                    }
+                });
+
+                activeGhost.classList.add('ghost-sent');
+                document.getElementById('btn-capture').style.display = 'none';
+                document.getElementById('main-black-card').style.opacity = '0';
+                document.getElementById('main-black-card').style.transform = 'scale(0.8)';
+                if (window.navigator.vibrate) window.navigator.vibrate(60);
+                
+                setTimeout(() => {
+                    if(activeGhost) {
+                        activeGhost.remove(); activeGhost = null;
+                        document.getElementById('confirmation-hud').style.display = 'block';
+                    }
+                }, 600);
+            } catch (err) {
+                console.error("Submission failed:", err);
+                alert("The Sky is busy. Try again.");
+            }
+        };
 
         function setupTactileEvents(el, action, isHandCard = false) {
             el.addEventListener('touchstart', (e) => {
@@ -201,7 +294,7 @@
             if (window.navigator.vibrate) window.navigator.vibrate([40, 40, 40]);
         }
 
-        function takeScreenshot() {
+        window.takeScreenshot = () => {
             if(!activeGhost) return;
             const captureContainer = document.createElement('div');
             captureContainer.style.cssText = 'display:flex; flex-direction:column; align-items:center; background:#050505; padding:30px; width:320px;';
@@ -221,8 +314,10 @@
                 if (win) { win.document.write(`<body style="margin:0; background:#050505; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh;"><img src="${imgData}" style="max-width:90%; border-radius:15px;" /><p style="color:white; font-family:sans-serif; margin-top:20px;">Long-press to save</p></body>`);
                 } else { const link = document.createElement('a'); link.download = 'BATS-Combination.png'; link.href = imgData; link.click(); }
             });
-        }
-        initGame();
+        };
+
+        // Start Auth
+        initAuth();
     </script>
 </body>
 </html>
