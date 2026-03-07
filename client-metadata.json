@@ -1,0 +1,16 @@
+{
+  "client_id": "https://bats.skydrops.app/client-metadata.json",
+  "client_name": "Blobs Against the Sky",
+  "client_uri": "https://bats.skydrops.app",
+  "logo_uri": "https://skydrops.app/logo.png",
+  "redirect_uris": [
+    "https://bats.skydrops.app/",
+    "https://bats.skydrops.app"
+  ],
+  "scope": "atproto",
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "application_type": "web",
+  "dpop_bound_access_tokens": true
+}
